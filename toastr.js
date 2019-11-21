@@ -11,10 +11,19 @@
  * Project: https://github.com/CodeSeven/toastr
  */
 /* global define */
+// Create Element.remove() function if not exist
+if (!('remove' in Element.prototype)) {
+    Element.prototype.remove = function() {
+        if (this.parentNode) {
+            this.parentNode.removeChild(this);
+        }
+    };
+}
+
 (function (define) {
-    define(['jquery'], function ($) {
+    define([], function () {
         return (function () {
-            var $container;
+            var container;
             var listener;
             var toastId = 0;
             var toastType = {
@@ -55,14 +64,14 @@
 
             function getContainer(options, create) {
                 if (!options) { options = getOptions(); }
-                $container = $('#' + options.containerId);
-                if ($container.length) {
-                    return $container;
+                container = document.getElementById(options.containerId);
+                if (container) {
+                    return container;
                 }
                 if (create) {
-                    $container = createContainer(options);
+                    container = createContainer(options);
                 }
-                return $container;
+                return container;
             }
 
             function info(message, title, optionsOverride) {
@@ -99,55 +108,54 @@
                 });
             }
 
-            function clear($toastElement, clearOptions) {
+            function clear(toastElement, clearOptions) {
                 var options = getOptions();
-                if (!$container) { getContainer(options); }
-                if (!clearToast($toastElement, options, clearOptions)) {
+                if (!container) { getContainer(options); }
+                if (!clearToast(toastElement, options, clearOptions)) {
                     clearContainer(options);
                 }
             }
 
-            function remove($toastElement) {
+            function remove(toastElement) {
                 var options = getOptions();
-                if (!$container) { getContainer(options); }
-                if ($toastElement && $(':focus', $toastElement).length === 0) {
-                    removeToast($toastElement);
+                if (!container) { getContainer(options); }
+                if (toastElement && document.activeElement === toastElement) {
+                    removeToast(toastElement);
                     return;
                 }
-                if ($container.children().length) {
-                    $container.remove();
+                if (container.children.length) {
+                    container.remove();
                 }
             }
 
             // internal functions
 
             function clearContainer (options) {
-                var toastsToClear = $container.children();
-                for (var i = toastsToClear.length - 1; i >= 0; i--) {
-                    clearToast($(toastsToClear[i]), options);
+                if(container){
+                    var toastsToClear = container.children;
+                    for (var i = toastsToClear.length - 1; i >= 0; i--) {
+                        clearToast(toastsToClear[i], options);
+                    }
                 }
             }
 
-            function clearToast ($toastElement, options, clearOptions) {
+            function clearToast (toastElement, options, clearOptions) {
                 var force = clearOptions && clearOptions.force ? clearOptions.force : false;
-                if ($toastElement && (force || $(':focus', $toastElement).length === 0)) {
-                    $toastElement[options.hideMethod]({
-                        duration: options.hideDuration,
-                        easing: options.hideEasing,
-                        complete: function () { removeToast($toastElement); }
-                    });
+                if (toastElement && !force) {
+
+                    toastElement.classList.add('toast-hide')
+                    setTimeout(function () {
+                        removeToast(toastElement);
+                    }, options.hideDuration)
                     return true;
                 }
                 return false;
             }
 
             function createContainer(options) {
-                $container = $('<div/>')
-                    .attr('id', options.containerId)
-                    .addClass(options.positionClass);
-
-                $container.appendTo($(options.target));
-                return $container;
+                var containerHTML = '<div id="'+options.containerId+'" class="'+(options.positionClass||'')+'"></div>'
+                options.target.insertAdjacentHTML('beforeend', containerHTML)
+                return document.getElementById(options.containerId);
             }
 
             function getDefaults() {
@@ -157,13 +165,9 @@
                     containerId: 'toast-container',
                     debug: false,
 
-                    showMethod: 'fadeIn', //fadeIn, slideDown, and show are built into jQuery
                     showDuration: 300,
-                    showEasing: 'swing', //swing and linear are built into jQuery
                     onShown: undefined,
-                    hideMethod: 'fadeOut',
                     hideDuration: 1000,
-                    hideEasing: 'swing',
                     onHidden: undefined,
                     closeMethod: false,
                     closeDuration: false,
@@ -183,7 +187,7 @@
                     titleClass: 'toast-title',
                     messageClass: 'toast-message',
                     escapeHtml: false,
-                    target: 'body',
+                    target: document.body,
                     closeHtml: '<button type="button">&times;</button>',
                     closeClass: 'toast-close-button',
                     newestOnTop: true,
@@ -204,7 +208,7 @@
                 var iconClass = map.iconClass || options.iconClass;
 
                 if (typeof (map.optionsOverride) !== 'undefined') {
-                    options = $.extend(options, map.optionsOverride);
+                    options = Object.assign(options, map.optionsOverride);
                     iconClass = map.optionsOverride.iconClass || iconClass;
                 }
 
@@ -212,14 +216,22 @@
 
                 toastId++;
 
-                $container = getContainer(options, true);
+                container = getContainer(options, true);
 
                 var intervalId = null;
-                var $toastElement = $('<div/>');
-                var $titleElement = $('<div/>');
-                var $messageElement = $('<div/>');
-                var $progressElement = $('<div/>');
-                var $closeElement = $(options.closeHtml);
+                var toastElement = document.createElement('div');
+                var titleElement = document.createElement('div');
+                var messageElement = document.createElement('div');
+                var progressElement = document.createElement('div');
+                var closeElement = document.createElement('div');
+                closeElement.insertAdjacentHTML('beforeend', options.closeHtml)
+                /**
+                 * TODO: Debug
+                 */
+                closeElement = closeElement.children[0];
+
+                toastElement.setAttribute('tabindex', '0');
+
                 var progressBar = {
                     intervalId: null,
                     hideEta: null,
@@ -245,7 +257,7 @@
                     console.log(response);
                 }
 
-                return $toastElement;
+                return toastElement;
 
                 function escapeHtml(source) {
                     if (source == null) {
@@ -253,11 +265,11 @@
                     }
 
                     return source
-                        .replace(/&/g, '&amp;')
-                        .replace(/"/g, '&quot;')
-                        .replace(/'/g, '&#39;')
-                        .replace(/</g, '&lt;')
-                        .replace(/>/g, '&gt;');
+                      .replace(/&/g, '&amp;')
+                      .replace(/"/g, '&quot;')
+                      .replace(/'/g, '&#39;')
+                      .replace(/</g, '&lt;')
+                      .replace(/>/g, '&gt;');
                 }
 
                 function personalizeToast() {
@@ -281,20 +293,24 @@
                         default:
                             ariaValue = 'assertive';
                     }
-                    $toastElement.attr('aria-live', ariaValue);
+                    toastElement.setAttribute('aria-live', ariaValue);
                 }
 
                 function handleEvents() {
                     if (options.closeOnHover) {
-                        $toastElement.hover(stickAround, delayedHideToast);
+                        toastElement.removeEventListener('mouseenter', stickAround);
+                        toastElement.addEventListener('mouseenter', stickAround);
+                        toastElement.removeEventListener('mouseleave', delayedHideToast);
+                        toastElement.addEventListener('mouseleave', delayedHideToast);
                     }
 
                     if (!options.onclick && options.tapToDismiss) {
-                        $toastElement.click(hideToast);
+                        toastElement.removeEventListener('click', hideToast);
+                        toastElement.addEventListener('click', hideToast);
                     }
 
-                    if (options.closeButton && $closeElement) {
-                        $closeElement.click(function (event) {
+                    if (options.closeButton && closeElement) {
+                        closeElement.addEventListener('click', function (event) {
                             if (event.stopPropagation) {
                                 event.stopPropagation();
                             } else if (event.cancelBubble !== undefined && event.cancelBubble !== true) {
@@ -310,7 +326,7 @@
                     }
 
                     if (options.onclick) {
-                        $toastElement.click(function (event) {
+                        toastElement.addEventListener('click', function (event) {
                             options.onclick(event);
                             hideToast();
                         });
@@ -318,11 +334,15 @@
                 }
 
                 function displayToast() {
-                    $toastElement.hide();
-
-                    $toastElement[options.showMethod](
-                        {duration: options.showDuration, easing: options.showEasing, complete: options.onShown}
-                    );
+                    /**
+                     * TODO: Debug
+                     */
+                    toastElement.classList.add('toast-show');
+                    if(options.onShown){
+                        setTimeout(function () {
+                            options.onShown();
+                        }, options.showDuration)
+                    }
 
                     if (options.timeOut > 0) {
                         intervalId = setTimeout(hideToast, options.timeOut);
@@ -336,15 +356,20 @@
 
                 function setIcon() {
                     if (map.iconClass) {
-                        $toastElement.addClass(options.toastClass).addClass(iconClass);
+                        toastElement.classList.add(options.toastClass);
+                        toastElement.classList.add(iconClass);
                     }
                 }
 
                 function setSequence() {
                     if (options.newestOnTop) {
-                        $container.prepend($toastElement);
+                        if(container.children[0]){
+                            container.insertBefore(toastElement, container.children[0]);
+                        } else {
+                            container.appendChild(toastElement);
+                        }
                     } else {
-                        $container.append($toastElement);
+                        container.appendChild(toastElement);
                     }
                 }
 
@@ -354,8 +379,9 @@
                         if (options.escapeHtml) {
                             suffix = escapeHtml(map.title);
                         }
-                        $titleElement.append(suffix).addClass(options.titleClass);
-                        $toastElement.append($titleElement);
+                        titleElement.innerHTML = suffix;
+                        titleElement.classList.add(options.titleClass);
+                        toastElement.appendChild(titleElement);
                     }
                 }
 
@@ -365,28 +391,38 @@
                         if (options.escapeHtml) {
                             suffix = escapeHtml(map.message);
                         }
-                        $messageElement.append(suffix).addClass(options.messageClass);
-                        $toastElement.append($messageElement);
+                        messageElement.innerHTML = suffix;
+                        messageElement.classList.add(options.messageClass);
+                        toastElement.appendChild(messageElement);
                     }
                 }
 
                 function setCloseButton() {
                     if (options.closeButton) {
-                        $closeElement.addClass(options.closeClass).attr('role', 'button');
-                        $toastElement.prepend($closeElement);
+                        closeElement.classList.add(options.closeClass);
+                        closeElement.setAttribute('role', 'button');
+                        if(toastElement.children[0]){
+                            toastElement.insertBefore(closeElement, toastElement.children[0]);
+                        } else {
+                            toastElement.appendChild(closeElement);
+                        }
                     }
                 }
 
                 function setProgressBar() {
                     if (options.progressBar) {
-                        $progressElement.addClass(options.progressClass);
-                        $toastElement.prepend($progressElement);
+                        progressElement.classList.add(options.progressClass);
+                        if(toastElement.children[0]){
+                            toastElement.insertBefore(progressElement, toastElement.children[0]);
+                        } else {
+                            toastElement.appendChild(progressElement);
+                        }
                     }
                 }
 
                 function setRTL() {
                     if (options.rtl) {
-                        $toastElement.addClass('rtl');
+                        toastElement.classList.add('rtl');
                     }
                 }
 
@@ -402,28 +438,22 @@
                 }
 
                 function hideToast(override) {
-                    var method = override && options.closeMethod !== false ? options.closeMethod : options.hideMethod;
                     var duration = override && options.closeDuration !== false ?
-                        options.closeDuration : options.hideDuration;
-                    var easing = override && options.closeEasing !== false ? options.closeEasing : options.hideEasing;
-                    if ($(':focus', $toastElement).length && !override) {
-                        return;
-                    }
+                      options.closeDuration : options.hideDuration;
                     clearTimeout(progressBar.intervalId);
-                    return $toastElement[method]({
-                        duration: duration,
-                        easing: easing,
-                        complete: function () {
-                            removeToast($toastElement);
-                            clearTimeout(intervalId);
-                            if (options.onHidden && response.state !== 'hidden') {
-                                options.onHidden();
-                            }
-                            response.state = 'hidden';
-                            response.endTime = new Date();
-                            publish(response);
+
+                    toastElement.classList.add('toast-hide')
+                    setTimeout(function () {
+                        removeToast(toastElement);
+                        clearTimeout(intervalId);
+                        if (options.onHidden && response.state !== 'hidden') {
+                            options.onHidden();
                         }
-                    });
+                        response.state = 'hidden';
+                        response.endTime = new Date();
+                        publish(response);
+                    }, duration)
+                    return toastElement;
                 }
 
                 function delayedHideToast() {
@@ -437,30 +467,28 @@
                 function stickAround() {
                     clearTimeout(intervalId);
                     progressBar.hideEta = 0;
-                    $toastElement.stop(true, true)[options.showMethod](
-                        {duration: options.showDuration, easing: options.showEasing}
-                    );
+                    /**
+                     * TODO: Debug
+                     */
+                    toastElement.classList.add('toast-show');
                 }
 
                 function updateProgress() {
                     var percentage = ((progressBar.hideEta - (new Date().getTime())) / progressBar.maxHideTime) * 100;
-                    $progressElement.width(percentage + '%');
+                    progressElement.style.width = percentage + '%';
                 }
             }
 
             function getOptions() {
-                return $.extend({}, getDefaults(), toastr.options);
+                return Object.assign(getDefaults(), toastr.options);
             }
 
-            function removeToast($toastElement) {
-                if (!$container) { $container = getContainer(); }
-                if ($toastElement.is(':visible')) {
-                    return;
-                }
-                $toastElement.remove();
-                $toastElement = null;
-                if ($container.children().length === 0) {
-                    $container.remove();
+            function removeToast(toastElement) {
+                if (!container) { container = getContainer(); }
+                toastElement.remove();
+                toastElement = null;
+                if (container.children.length === 0) {
+                    container.remove();
                     previousToast = undefined;
                 }
             }
@@ -469,8 +497,8 @@
     });
 }(typeof define === 'function' && define.amd ? define : function (deps, factory) {
     if (typeof module !== 'undefined' && module.exports) { //Node
-        module.exports = factory(require('jquery'));
+        module.exports = factory();
     } else {
-        window.toastr = factory(window.jQuery);
+        window.toastr = factory();
     }
 }));
